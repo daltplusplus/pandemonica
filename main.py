@@ -29,36 +29,46 @@ async def on_ready():
     logging.info("Pandemonica ready")
     enviar_mensaje_diario.start()  # Inicia la tarea periódica
 
-@tasks.loop(minutes=1)
+@tasks.loop(hours=24)
 async def enviar_mensaje_diario():
     ahora = datetime.datetime.now()
-    if ahora.hour == 19 and ahora.minute == 30:
+    if ahora.isoweekday() == 4:
         logging.info("recomendacion por tiempo")
         canal = bot.get_channel(ID_CANAL_DESTINO)
-        canalcon = bot.get_channel(ID_CANAL_CONTENIDO)
-        mensajes = [mensaje async for mensaje in canalcon.history(limit=None)]
 
-        partida = partida_random(mensajes)
-        if canal:
-            await canal.send("@everyone\n"
-            ":rotating_light: **HORA DE ROLEAR** :rotating_light:\n"
-            "Les informo que la partida: **" + str(extraer_nombre(partida.content)) + "** BUSCA JUGADORES\n"
-            "Aca los detalles: " + str(partida.jump_url))
+        mensaje = "@everyone\n"
+        ":rotating_light: **MOMENTO DE ROLEAR** :rotating_light:\n"
+        "Las siguientes partidas requieren jugadores:\n"
+        for k in range(0, len(partidas)):
+            mensaje = mensaje + "partida: **" + str(extraer_nombre(partidas[k].content)) + "**\nLink: " + str(partidas[k].jump_url) + "\n"
+    
+        await canal.send(mensaje)
 
-@bot.command(help="te recomiendo una partida <3")
+@bot.command(help="te recomiendo una partida")
 async def recomenda(ctx):
     logging.info("recomendacion por comando a pedido de " + ctx.author.display_name )
-    canal = bot.get_channel(ID_CANAL_CONTENIDO)
-    mensajes = [mensaje async for mensaje in canal.history(limit=None)]
     
-    
-    partida = partida_random(mensajes)
+    partida = await partida_random()
     if partida:
         await ctx.send("Mira te recomiendo: **"+ str(extraer_nombre(partida.content)) + "**\nAca tenes el link: " + str(partida.jump_url))
     else:
         await ctx.send("No encontré mensajes en este canal.")
 
-def partida_random(mensajes):
+@bot.command()
+async def listar_partidas(ctx):
+    logging.info("listando por comando a pedido de " + ctx.author.display_name )
+    partidas = await todas_las_partidas()
+
+    mensaje = ""
+    for k in range(0, len(partidas)):
+        mensaje = mensaje + "partida: **" + str(extraer_nombre(partidas[k].content)) + "**\nLink: " + str(partidas[k].jump_url) + "\n"
+    
+    await ctx.send(mensaje)
+
+
+async def todas_las_partidas():
+    canal = bot.get_channel(ID_CANAL_CONTENIDO)
+    mensajes = [mensaje async for mensaje in canal.history(limit=None)]
     filtrados = []
     for k in range(0, len(mensajes)):
         string = ""
@@ -66,6 +76,11 @@ def partida_random(mensajes):
         string = string.casefold()
         if string.count("partida:") or string.count("partida]:"):
             filtrados.append(mensajes[k])
+
+    return filtrados
+
+async def partida_random():
+    filtrados = await todas_las_partidas()
 
     rn = random.randint(0, len(filtrados)-1)
     return filtrados[rn]
@@ -81,6 +96,14 @@ def extraer_nombre(texto):
             resultados.append(match.group(1).strip())
 
     return resultados[0]
+
+@bot.command()
+async def siono(ctx):
+    if random.randint(0,1):
+        await ctx.send("si.")
+    else:
+        await ctx.send("no.")
+
 
 
 bot.run(token)
