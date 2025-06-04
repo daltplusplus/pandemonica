@@ -39,6 +39,7 @@ async def enviar_mensaje_diario():
         mensaje = "@everyone\n"
         ":rotating_light: **MOMENTO DE ROLEAR** :rotating_light:\n"
         "Las siguientes partidas requieren jugadores:\n"
+        partidas = await todas_las_partidas()
         for k in range(0, len(partidas)):
             mensaje = mensaje + "partida: **" + str(extraer_nombre(partidas[k].content)) + "**\nLink: " + str(partidas[k].jump_url) + "\n"
     
