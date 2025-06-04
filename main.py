@@ -15,7 +15,7 @@ intents = discord.Intents.default()
 intents.message_content = True  # Necesario para enviar mensajes
 bot = commands.Bot(command_prefix="pande ", intents=intents)
 
-ID_CANAL_DESTINO = 842495175766573057
+ID_CANAL_DESTINO = 1373779915098296390
 ID_CANAL_CONTENIDO = 1373781362183639081
 
 
