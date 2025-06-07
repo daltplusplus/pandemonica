@@ -6,6 +6,11 @@ import os
 import datetime
 import random
 import re
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+from pytz import timezone
+
+argentina_tz = timezone("America/Argentina/Buenos_Aires")
 
 load_dotenv()
 token = os.getenv('TOKEN')
@@ -14,58 +19,82 @@ log_dir = os.getenv('LOG_DIR')
 intents = discord.Intents.default()
 intents.message_content = True  # Necesario para enviar mensajes
 bot = commands.Bot(command_prefix="pande ", intents=intents)
+scheduler = AsyncIOScheduler()
 
 ID_CANAL_DESTINO = 1373779915098296390
 ID_CANAL_CONTENIDO = 1373781362183639081
+ID_CANAL_TEST = 842495175766573057
 
 
 logging.basicConfig(
     level=logging.INFO,                      # Nivel mínimo de log que se mostrará
     format='%(asctime)s - %(levelname)s - %(message)s',  # Formato del mensaje
     filename=log_dir,                   # (opcional) archivo donde guardar logs
-    filemode='a'                             # 'w' para sobrescribir, 'a' para añadir
+    filemode='w'                             # 'w' para sobrescribir, 'a' para añadir
 )
 
 @bot.event
 async def on_ready():
     logging.info("Pandemonica ready")
-    await enviar_recordatorio_programado() # Inicia la tarea periódica
-    await aviso_antiguedad()
+    scheduler.start()
 
-@tasks.loop(hours=1)
-async def enviar_recordatorio_programado():
-    ahora = datetime.datetime.now()
-    if ahora.weekday() == 4 and ahora.hour == 16:
-        logging.info("recomendacion por tiempo")
-        canal = bot.get_channel(ID_CANAL_DESTINO)
+    scheduler.add_job(
+        aviso_antiguedad,
+        CronTrigger(day=1, hour=19, minute=30, timezone=argentina_tz),
+        name="Aviso de partidas viejas"
+    )
+    scheduler.add_job(
+        enviar_recordatorio_programado,
+        CronTrigger(day_of_week="fri", hour=16, minute=40, timezone=argentina_tz),
+        name="Recomendacion de partidas"
+    )
+    aviso_poco_trafico.start()
 
-        mensaje = "everyone\n" 
-        mensaje += ":rotating_light: **ANUNCIOS DE PARTIDAS** :rotating_light:\n"
-        mensaje += "**aprovecho esta oportunidad para recordarles que las siguientes partidas requieren jugadores:**\n"
-        partidas = await todas_las_partidas()
-        for k in range(0, len(partidas)):
-            mensaje += "partida: **" + str(extraer_nombre(partidas[k].content)) + "**\nLink: " + str(partidas[k].jump_url) + "\n"
     
-        await canal.send(mensaje)
 
 @tasks.loop(hours=1)
-async def aviso_antiguedad():
+async def aviso_poco_trafico():
+    canal = bot.get_channel(ID_CANAL_DESTINO)
     ahora = datetime.datetime.now()
-    if ahora.day == 1 and ahora.hour == 18:
-        atleastone = False
-        canal = bot.get_channel(ID_CANAL_DESTINO)
-        partidas = await todas_las_partidas()
+    mensaje = await ultimo_mensaje(canal)
+    dif = ahora.replace(tzinfo=None) - mensaje.created_at.replace(tzinfo=None)
+    if dif.seconds > 16*3600:
+        logging.info("aviso poco trafico")
+        poemas = leer_poemas("poemas.txt")
+        await canal.send(random.choice(poemas))
 
-        mensaje = "Los siguiente anuncios tienen mas de un mes de antiguedad :book:\n"
-        for k in range(0, len(partidas)):
-            dif = ahora.replace(tzinfo=None) - partidas[k].created_at.replace(tzinfo=None)
-            if dif.days > 31:
-                atleastone = True
-                mensaje += "**" + str(extraer_nombre(partidas[k].content)) + "** de @" + str(partidas[k].author) + "\n"
 
-        mensaje += "revisarlos por favor :coffee:"
-        if atleastone:
-            await canal.send(mensaje)
+
+async def enviar_recordatorio_programado():
+    logging.info("recomendacion por tiempo")
+    canal = bot.get_channel(ID_CANAL_DESTINO)
+
+    mensaje = "@everyone\n" 
+    mensaje += ":rotating_light: **ANUNCIOS DE PARTIDAS** :rotating_light:\n"
+    mensaje += "**aprovecho esta oportunidad para recordarles que las siguientes partidas requieren jugadores:**\n"
+    partidas = await todas_las_partidas()
+    for k in range(0, len(partidas)):
+        mensaje += "partida: **" + str(extraer_nombre(partidas[k].content)) + "**\nLink: " + str(partidas[k].jump_url) + "\n"
+
+    await canal.send(mensaje)
+
+async def aviso_antiguedad():
+    logging.info("aviso antiguedad")
+    ahora = datetime.datetime.now()
+    atleastone = False
+    canal = bot.get_channel(ID_CANAL_DESTINO)
+    partidas = await todas_las_partidas()
+
+    mensaje = "Los siguiente anuncios tienen mas de un mes de antiguedad :book:\n"
+    for k in range(0, len(partidas)):
+        dif = ahora.replace(tzinfo=None) - partidas[k].created_at.replace(tzinfo=None)
+        if dif.days > 31:
+            atleastone = True
+            mensaje += "**" + str(extraer_nombre(partidas[k].content)) + "** de @" + str(partidas[k].author) + "\n"
+
+    mensaje += "revisarlos por favor :coffee:"
+    if atleastone:
+        await canal.send(mensaje)
 
 
 @bot.command(help="te recomiendo una partida")
@@ -78,7 +107,7 @@ async def recomenda(ctx):
     else:
         await ctx.send("No encontré mensajes en este canal.")
 
-@bot.command()
+@bot.command(help="listo todas las partidas existentes")
 async def listar_partidas(ctx):
     logging.info("listando por comando a pedido de " + ctx.author.display_name )
     partidas = await todas_las_partidas()
@@ -129,6 +158,16 @@ async def siono(ctx):
     else:
         await ctx.send("no.")
 
+async def ultimo_mensaje(canal):
+    mensajes = [mensaje async for mensaje in canal.history(limit=1, oldest_first=True)]
+    return mensajes[0]
+
+def leer_poemas(nombre_archivo):
+    with open(nombre_archivo, 'r', encoding='utf-8') as f:
+        contenido = f.read()
+    # Dividir el texto en poemas usando doble salto de línea como separador
+    poemas = contenido.strip().split('\n\n')
+    return poemas
 
 
 bot.run(token)
