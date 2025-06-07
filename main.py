@@ -3,14 +3,14 @@ from discord.ext import commands, tasks
 import logging
 from dotenv import load_dotenv
 import os
-import datetime
+from datetime import datetime, timezone
 import random
 import re
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from pytz import timezone
+import pytz
 
-argentina_tz = timezone("America/Argentina/Buenos_Aires")
+argentina_tz = pytz.timezone("America/Argentina/Buenos_Aires")
 
 load_dotenv()
 token = os.getenv('TOKEN')
@@ -50,15 +50,15 @@ async def on_ready():
     )
     aviso_poco_trafico.start()
 
-    
-
 @tasks.loop(hours=1)
 async def aviso_poco_trafico():
     canal = bot.get_channel(ID_CANAL_DESTINO)
-    ahora = datetime.datetime.now()
+    ahora = datetime.now(timezone.utc)
     mensaje = await ultimo_mensaje(canal)
+    
     dif = ahora.replace(tzinfo=None) - mensaje.created_at.replace(tzinfo=None)
-    if dif.seconds > 16*3600:
+    if dif.total_seconds() > 16 * 3600:
+        logging.info("tiempo ultimo mensaje " + str(mensaje.created_at))
         logging.info("aviso poco trafico")
         poemas = leer_poemas("poemas.txt")
         await canal.send(random.choice(poemas))
@@ -95,7 +95,6 @@ async def aviso_antiguedad():
     mensaje += "revisarlos por favor :coffee:"
     if atleastone:
         await canal.send(mensaje)
-
 
 @bot.command(help="te recomiendo una partida")
 async def recomenda(ctx):
@@ -159,13 +158,12 @@ async def siono(ctx):
         await ctx.send("no.")
 
 async def ultimo_mensaje(canal):
-    mensajes = [mensaje async for mensaje in canal.history(limit=1, oldest_first=True)]
+    mensajes = [mensaje async for mensaje in canal.history(limit=1)]
     return mensajes[0]
 
 def leer_poemas(nombre_archivo):
     with open(nombre_archivo, 'r', encoding='utf-8') as f:
         contenido = f.read()
-    # Dividir el texto en poemas usando doble salto de línea como separador
     poemas = contenido.strip().split('\n\n')
     return poemas
 
