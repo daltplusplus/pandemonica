@@ -50,14 +50,15 @@ async def on_ready():
     )
     aviso_poco_trafico.start()
 
-@tasks.loop(hours=1)
+@tasks.loop(minutes=10)
 async def aviso_poco_trafico():
     canal = bot.get_channel(ID_CANAL_DESTINO)
     ahora = datetime.now(timezone.utc)
     mensaje = await ultimo_mensaje(canal)
     
     dif = ahora.replace(tzinfo=None) - mensaje.created_at.replace(tzinfo=None)
-    if dif.total_seconds() > 16 * 3600:
+    logging.info("checkendo tiempo ultimo mensaje")
+    if dif.total_seconds() > 13 * 3600:
         logging.info("tiempo ultimo mensaje " + str(mensaje.created_at))
         logging.info("aviso poco trafico")
         poemas = leer_poemas("poemas.txt")
