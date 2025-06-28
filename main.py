@@ -103,9 +103,9 @@ async def recomenda(ctx):
     
     partida = await partida_random()
     if partida:
-        await ctx.send("Mira te recomiendo: **"+ str(extraer_nombre(partida.content)) + "**\nAca tenes el link: " + str(partida.jump_url))
+        await ctx.reply("Mira te recomiendo: **"+ str(extraer_nombre(partida.content)) + "**\nAca tenes el link: " + str(partida.jump_url))
     else:
-        await ctx.send("No encontré mensajes en este canal.")
+        await ctx.reply("No encontré mensajes en este canal.")
 
 @bot.command(help="listo todas las partidas existentes")
 async def listar_partidas(ctx):
@@ -116,7 +116,7 @@ async def listar_partidas(ctx):
     for k in range(0, len(partidas)):
         mensaje = mensaje + "partida: **" + str(extraer_nombre(partidas[k].content)) + "**\nLink: " + str(partidas[k].jump_url) + "\n"
     
-    await ctx.send(mensaje)
+    await ctx.reply(mensaje)
 
 
 async def todas_las_partidas():
@@ -154,9 +154,10 @@ def extraer_nombre(texto):
 async def siono(ctx):
     logging.info("si o no a pedido de " + ctx.author.display_name )
     if random.randint(0,1):
-        await ctx.send("si.")
+        await ctx.reply("si.")
     else:
-        await ctx.send("no.")
+        await ctx.reply("no.")
+
 
 async def ultimo_mensaje(canal):
     mensajes = [mensaje async for mensaje in canal.history(limit=1)]
